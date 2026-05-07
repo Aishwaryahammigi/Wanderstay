@@ -7,6 +7,7 @@ const methodOverride = require("method-override");
 const ejsMate = require("ejs-mate");
 const wrapAsync = require("./utils/wrapAsync.js");
 const ExpressError = require("./utils/ExpressError.js");
+const { listingSchema } = require("./schema.js");
 
 const MONGO_URL = "mongodb://127.0.0.1:27017/wanderlust";
 
@@ -30,6 +31,16 @@ app.get("/", (req, res) => {
   res.send("Hi, I am root");
 });
 
+const validateListing = (req, res, next) => {
+  let {error} = listingSchema.validate(req.body);
+  if (error) {
+    let errMsg = error.details.map((el) => el.message).join(",");
+    throw new ExpressError(400, errMsg);
+  } else {
+    next();
+  }
+}
+
 // Index Route
 app.get("/listings", wrapAsync(async (req, res) => {
   const allListings = await Listing.find({});
@@ -51,11 +62,24 @@ app.get("/listings/:id", wrapAsync(async (req, res) => {
   res.render("listings/show.ejs", { listing });
 }));
 
+// // Create Route
+// app.post("/listings", validateListing wrapAsync(async (req, res) => {
+//   let result = listingSchema.validate(req.body);
+//   console.log(result);
+//   if (result.error) {
+//     throw new ExpressError(400, result.error);
+//   }
+//   let newListingData = req.body.listing;
+//   if (typeof newListingData.image === "string") {
+//     newListingData.image = { url: newListingData.image, filename: "listingimage" };
+//   }
+//   const newListing = new Listing(newListingData);
+//   await newListing.save();
+//   res.redirect("/listings");
+// }));
+
 // Create Route
-app.post("/listings", wrapAsync(async (req, res) => {
-  if (!req.body || !req.body.listing) {
-    throw new ExpressError(400, "Send valid data for listing");
-  }
+app.post("/listings", validateListing, wrapAsync(async (req, res) => {
   let newListingData = req.body.listing;
   if (typeof newListingData.image === "string") {
     newListingData.image = { url: newListingData.image, filename: "listingimage" };
@@ -76,7 +100,7 @@ app.get("/listings/:id/edit", wrapAsync(async (req, res) => {
 }));
 
 // Update Route
-app.put("/listings/:id", wrapAsync(async (req, res) => {
+app.put("/listings/:id",validateListing, wrapAsync(async (req, res) => {
   let { id } = req.params;
   let updateData = { ...req.body.listing };
   if (typeof updateData.image === "string") {
@@ -102,7 +126,8 @@ app.all(/(.*)/, (req, res, next) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   let { statusCode = 500, message = "Something went wrong" } = err;
-  res.status(statusCode).send(message);
+  // res.status(statusCode).send(message);
+  res.status(statusCode).render("error.ejs", { message });
 });
 
 app.listen(8080, () => {
